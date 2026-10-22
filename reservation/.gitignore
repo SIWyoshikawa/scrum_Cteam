@@ -1,0 +1,16 @@
+# 秘密情報（DD 6.6：資格情報をGitにコミットしない）
+.env
+.env.*
+!.env.example
+
+# ログ・バックアップ・DBダンプ（Web公開外、Git管理外）
+storage/logs/*
+!storage/logs/.gitkeep
+*.sql.gz
+*.dump
+backups/
+
+# OS / エディタ
+.DS_Store
+.idea/
+.vscode/

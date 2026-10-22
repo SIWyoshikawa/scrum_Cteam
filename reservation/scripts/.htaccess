@@ -1,0 +1,2 @@
+# このフォルダはWebから見せない（.htaccess が効かない場合の二重の守り）
+Require all denied
