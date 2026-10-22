@@ -1,0 +1,149 @@
+/* 仮デザイン（2026-10 ワイヤーフレーム準拠）：水色の背景・グレーのヘッダーとカード・白い入力欄 */
+:root {
+  --bg: #a0fff8;
+  --surface: #d9d9d9;
+  --field: #ffffff;
+  --text: #111111;
+  --muted: #3d3d3d;
+  --accent: #0b57d0;          /* ヘッダー下線・リンク・フォーカス */
+  --info-bg: #eef6ff;
+  --info-text: #0b4a8a;
+  --error-bg: #fff0ee;
+  --error-text: #a4161a;
+  --radius-card: 24px;
+  --radius-field: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+/* ---- ヘッダー ---- */
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 16px;
+  min-height: 60px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+}
+.brand {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  text-align: center;
+}
+/* ログイン後はタイトル左・メニュー右 */
+.site-header.has-nav { justify-content: space-between; }
+.nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.nav a { color: var(--accent); }
+.user { display: inline-flex; align-items: center; gap: 6px; }
+
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; background: var(--field); }
+.badge-admin { color: #7a2e00; }
+.badge-student { color: #0b4a8a; }
+.badge-teacher { color: #1a5e20; }
+
+/* ---- 本文・カード ---- */
+.container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+.card {
+  background: var(--surface);
+  border-radius: var(--radius-card);
+  padding: 32px;
+}
+.card.narrow { max-width: 420px; margin: 0 auto; }
+h1 { font-size: 22px; margin-top: 0; }
+
+/* ---- ログイン画面：カードを画面の中央に ---- */
+.login-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 60px - 48px);
+}
+.login-card {
+  width: 100%;
+  max-width: 340px;
+  padding: 36px 44px 40px;
+}
+.login-card h1 {
+  font-size: 22px;
+  font-weight: 400;
+  text-align: center;
+  margin-bottom: 28px;
+}
+.login-card .icon { margin-right: 2px; }
+.login-card label { font-size: 12px; margin-top: 12px; }
+.login-card .actions { text-align: center; margin-top: 28px; }
+.login-card .help { text-align: center; margin-bottom: 0; font-size: 12px; }
+
+/* ---- フォーム ---- */
+label { display: block; margin-top: 16px; font-weight: 700; }
+input[type="text"], input[type="password"] {
+  width: 100%;
+  min-height: 32px;            /* ワイヤーより少し高くして、スマホで押しやすくする */
+  padding: 4px 12px;
+  margin-top: 4px;
+  font-size: 16px;             /* iPhoneで入力時に拡大されないよう16px */
+  background: var(--field);
+  border: 1px solid transparent;
+  border-radius: var(--radius-field);
+}
+input:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.button {
+  display: inline-block;
+  margin-top: 20px;
+  padding: 6px 12px;
+  font-size: 20px;
+  color: var(--text);
+  background: var(--field);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.login-card .button { margin-top: 0; }
+.button:hover { background: #f2f2f2; }
+
+form.inline { display: inline; margin: 0; }
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* 色だけに頼らず、文字でも種類が分かる表示にする（REQ-F-013 の考え方） */
+.alert { padding: 10px 12px; border-radius: 8px; border-left: 4px solid currentColor; font-size: 14px; }
+.alert-info { background: var(--info-bg); color: var(--info-text); }
+.alert-error { background: var(--error-bg); color: var(--error-text); }
+.alert-error::before { content: "エラー："; font-weight: 700; }
+.errors { margin: 0; padding-left: 1.2em; }
+
+.help { color: var(--muted); font-size: 14px; }
+code { background: var(--field); padding: 1px 6px; border-radius: 4px; }
+
+/* ---- スマホ ---- */
+@media (max-width: 480px) {
+  .brand { font-size: 17px; }
+  .container { margin: 16px auto; padding: 0 10px; }
+  .login-card { max-width: none; padding: 32px 30px; }
+  .card { padding: 24px 20px; }
+}
