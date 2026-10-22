@@ -1,0 +1,26 @@
+# ------------------------------------------------------------------
+# プロジェクト直下の .htaccess（htdocs/reservation に置いた場合の守り）
+# 本来は Apache の DocumentRoot を public/ にするのが一番安全。
+# それができない XAMPP 初期状態でも、public/ 以外を見せないための設定。
+# ------------------------------------------------------------------
+
+# フォルダの中身一覧を表示しない
+Options -Indexes
+
+# .env / .git / .gitignore など「.」で始まるファイル・フォルダは常に拒否
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+RedirectMatch 404 "/\.(git|env|svn)"
+
+# SQLダンプ・ログ・設定っぽいファイルは拡張子でも拒否（二重の守り）
+<FilesMatch "\.(sql|log|env|ini|bak|dump|gz|zip|md|sh)$">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # すべてのアクセスを public/ の中へ送る（app/ config/ storage/ などには届かない）
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
