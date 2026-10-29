@@ -25,15 +25,15 @@ final class AccountService
     }
 
     /** 事前登録。仮パスワードを返す（ここでしか平文は分からない） */
-    public function createUser(?int $actorId, string $loginId, string $email, string $role, ?string $tempPassword = null): array
+    public function createUser(?int $actorId, string $loginId, string $name, string $email, string $role, ?string $tempPassword = null): array
     {
         $tempPassword ??= PasswordPolicy::generateTemporary();
         $errors = $this->policy->validate($tempPassword, $loginId);
         if ($errors !== []) {
             throw new \InvalidArgumentException(implode(' ', $errors));
         }
-        $id = $this->db->transaction(function () use ($actorId, $loginId, $email, $role, $tempPassword): int {
-            $id = $this->users->create($loginId, $email, password_hash($tempPassword, PASSWORD_DEFAULT), $role);
+        $id = $this->db->transaction(function () use ($actorId, $loginId, $name, $email, $role, $tempPassword): int {
+            $id = $this->users->create($loginId, $name, $email, password_hash($tempPassword, PASSWORD_DEFAULT), $role);
             $this->audit->success('user_created', $actorId, $id);
             return $id;
         });

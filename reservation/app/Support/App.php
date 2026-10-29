@@ -124,7 +124,7 @@ final class App
         }
         $sessions = $this->sessions();
         $tokenHash = SessionRepository::hashToken(session_id());
-        $state = $sessions->check($tokenHash, $userId, $this->config['session']['idle_timeout']);
+        $state = $sessions->check($tokenHash, $userId);
         $user = $state === 'valid' ? $this->users()->findById($userId) : null;
 
         if ($user === null) {
@@ -152,7 +152,7 @@ final class App
 
     public function sessions(): SessionRepository
     {
-        return new SessionRepository($this->db->pdo());
+        return new SessionRepository($this->db->pdo(), $this->config['session']['idle_timeout']);
     }
 
     public function audit(): AuthAuditLogger

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * アカウントの停止・再有効化・仮パスワード再発行（DB設計書 5-6 / 5-7）※Webからは実行できない
- * 管理画面ができるまでの代わり。どの操作も auth_audit_logs に記録される。
+ * 管理画面ができるまでの代わり。どの操作も audit_logs に記録される。
  *
  * 使い方:
  *   PHP=/Applications/XAMPP/xamppfiles/bin/php
