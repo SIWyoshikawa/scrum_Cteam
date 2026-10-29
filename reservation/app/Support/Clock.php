@@ -27,6 +27,12 @@ final class Clock
         return new \DateTimeImmutable($value, new \DateTimeZone('UTC'));
     }
 
+    /** 学内運用日（日本時間の今日）。予約の日付チェックや延滞判定の基準日 */
+    public static function todayJst(?\DateTimeImmutable $now = null): string
+    {
+        return ($now ?? self::nowUtc())->setTimezone(new \DateTimeZone('Asia/Tokyo'))->format('Y-m-d');
+    }
+
     /** DBのUTC文字列 → 画面用の日本時間 */
     public static function toJst(string $dbValue, string $format = 'Y-m-d H:i'): string
     {

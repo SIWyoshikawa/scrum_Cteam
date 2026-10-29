@@ -34,6 +34,10 @@ final class Database
             ]);
             $this->pdo->exec("SET time_zone = '+00:00'");
             $this->pdo->exec("SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO'");
+            // 各SQLが「その時点で確定している最新の行」を読むようにする。
+            // 既定の REPEATABLE READ だと、行ロックを待っている間に他の人が確定した承認が
+            // 見えず（古いスナップショットのまま）、在庫を二重に押さえてしまう（詳細設計 5.3）。
+            $this->pdo->exec('SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED');
         }
         return $this->pdo;
     }

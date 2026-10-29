@@ -43,6 +43,28 @@ final class Request
         return is_string($value) ? $value : null;
     }
 
+    /**
+     * POSTの配列値（例：qty[3]=2）。キーは正の整数、値は文字列だけ残す（それ以外は捨てる）
+     * @return array<int,string>
+     */
+    public function inputMap(string $key, int $maxItems = 100): array
+    {
+        $value = $this->post[$key] ?? null;
+        if (!is_array($value)) {
+            return [];
+        }
+        $out = [];
+        foreach ($value as $k => $v) {
+            if (is_string($v) && preg_match('/^[1-9][0-9]{0,9}$/', (string) $k)) {
+                $out[(int) $k] = $v;
+            }
+            if (count($out) >= $maxItems) {
+                break;
+            }
+        }
+        return $out;
+    }
+
     public function query(string $key): ?string
     {
         $value = $this->query[$key] ?? null;
