@@ -6,7 +6,7 @@ namespace App\Repositories;
 use PDO;
 
 /**
- * users / roles テーブル（DB設計書 3章）
+ * users / roles テーブル（オーナー作成 001_equipment_management.sql）
  * SQLはすべてプレースホルダでバインドする（DD 6.1）。
  *
  * 注意：users.user_id は「ログインID（文字列）」、users.id は「内部番号」。
@@ -18,8 +18,11 @@ final class UserRepository
 {
     public const ROLES = ['student', 'teacher', 'admin'];
 
-    private const SELECT = 'SELECT u.id, u.user_id AS login_id, u.email, u.password_hash, u.status,
-                                   u.must_change_password, r.role_name AS role, r.display_name AS role_display
+    /** 画面に出すロール名（roles テーブルには表示名の列が無いので、ここで対応させる） */
+    public const ROLE_LABELS = ['student' => '生徒', 'teacher' => '教員', 'admin' => '管理者'];
+
+    private const SELECT = 'SELECT u.id, u.user_id AS login_id, u.name, u.email, u.password_hash, u.status,
+                                   u.must_change_password, r.role_name AS role
                               FROM users u
                               JOIN roles r ON r.id = u.role_id';
 
@@ -51,29 +54,32 @@ final class UserRepository
     }
 
     /** 管理者による事前登録（DB設計書 5-1）。仮パスワードなので must_change_password = TRUE */
-    public function create(string $loginId, string $email, string $passwordHash, string $role): int
+    public function create(string $loginId, string $name, string $email, string $passwordHash, string $role): int
     {
         if (!in_array($role, self::ROLES, true)) {
             throw new \InvalidArgumentException('不正なロール');
         }
         $stmt = $this->pdo->prepare(
-            'INSERT INTO users (user_id, password_hash, email, role_id, status, must_change_password)
-             SELECT :login_id, :hash, :email, r.id, \'active\', TRUE FROM roles r WHERE r.role_name = :role'
+            'INSERT INTO users (user_id, name, password_hash, email, role_id, status, must_change_password)
+             SELECT :login_id, :name, :hash, :email, r.id, \'active\', TRUE FROM roles r WHERE r.role_name = :role'
         );
-        $stmt->execute([':login_id' => $loginId, ':hash' => $passwordHash, ':email' => $email, ':role' => $role]);
+        $stmt->execute([
+            ':login_id' => $loginId, ':name' => $name, ':hash' => $passwordHash, ':email' => $email, ':role' => $role,
+        ]);
         if ($stmt->rowCount() !== 1) {
             throw new \RuntimeException('roles にロールが登録されていません: ' . $role);
         }
         return (int) $this->pdo->lastInsertId();
     }
 
-    /** 本人によるパスワード変更（DB設計書 5-5） */
+    /**
+     * 本人によるパスワード変更（DB設計書 5-5）
+     * 変更日時は users に列が無いので、audit_logs の password_changed で記録する。
+     */
     public function changePasswordBySelf(int $id, string $hash): void
     {
         $stmt = $this->pdo->prepare(
-            'UPDATE users SET password_hash = :hash, must_change_password = FALSE,
-                              password_changed_at = UTC_TIMESTAMP(6)
-              WHERE id = :id'
+            'UPDATE users SET password_hash = :hash, must_change_password = FALSE WHERE id = :id'
         );
         $stmt->execute([':hash' => $hash, ':id' => $id]);
     }
@@ -122,6 +128,7 @@ final class UserRepository
         $row['id'] = (int) $row['id'];
         $row['must_change_password'] = (bool) $row['must_change_password'];
         $row['is_active'] = $row['status'] === 'active';
+        $row['role_display'] = self::ROLE_LABELS[$row['role']] ?? $row['role'];
         return $row;
     }
 }

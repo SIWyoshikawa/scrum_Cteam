@@ -24,7 +24,8 @@ $title = $title ?? '';
   <?php if ($currentUser !== null): ?>
     <nav class="nav">
       <span class="user">
-        <?= h($currentUser['login_id']) /* 表示名の列が無いため当面はユーザーID（PO確認待ち） */ ?>
+        <?= h($currentUser['name']) ?>
+        <span class="login-id">(<?= h($currentUser['login_id']) ?>)</span>
         <span class="badge badge-<?= h($currentUser['role']) ?>"><?= h($currentUser['role_display']) ?></span>
       </span>
       <?php if ($currentUser['role'] === 'admin' && !$currentUser['must_change_password']): ?>

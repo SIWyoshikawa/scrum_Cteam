@@ -35,7 +35,7 @@ if (!is_file($envFile)) {
 $env = parse_env((string) file_get_contents($envFile));
 $host = $env['DB_HOST'] ?? '127.0.0.1';
 $port = (int) ($env['DB_PORT'] ?? '3306');
-$dbName = $env['DB_NAME'] ?? 'school_reservation';
+$dbName = $env['DB_NAME'] ?? 'equipment_management';
 $appUser = $env['DB_USER'] ?? 'rsv_app';
 
 $opts = getopt('', ['admin-user:']);
@@ -48,12 +48,12 @@ try {
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
     ]);
 } catch (PDOException $e) {
-    fail("管理者({$adminUser})でDBに接続できませんでした。XAMPPで MySQL が起動しているか、管理者のパスワード、.env の DB_HOST（XAMPPなら localhost）を確認してください。\n  詳細: " . $e->getMessage());
+    fail("管理者({$adminUser})でDBに接続できませんでした。XAMPPで MySQL が起動しているか、管理者のパスワードを確認してください。\n  詳細: " . $e->getMessage());
 }
 
 $exists = $admin->query("SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = " . $admin->quote($dbName))->fetchColumn();
 if ((int) $exists !== 1) {
-    fail("データベース {$dbName} がありません。先に phpMyAdmin で database/migrations/001_auth_schema.sql を実行してください。");
+    fail("データベース {$dbName} がありません。先に phpMyAdmin で database/migrations/001_equipment_management.sql と 002_login_attempts.sql を実行してください。\n  （.env の DB_NAME が equipment_management になっているかも確認してください）");
 }
 
 // ---- 2. パスワードを作り、02_create_app_user.sql を実行 ----

@@ -8,8 +8,8 @@ use App\Repositories\AuthAuditLogRepository;
 /**
  * 認証・アカウント管理の監査ログ（DB設計書 DB-012）
  *
- * ※ 予約の承認・貸出・返却など業務操作の監査ログ（詳細設計書 DD 6.7：変更前後・理由・相関ID）は
- *   このテーブルでは記録できないため、業務テーブルを作る工程で別テーブルとして追加する（PO確認事項）。
+ * 記録先はオーナー作成の audit_logs。予約の承認・貸出・返却など業務操作も、
+ * 業務画面を作る工程で同じ audit_logs に（entity_type = 'reservation' などで）記録する。
  */
 final class AuthAuditLogger
 {
@@ -41,7 +41,8 @@ final class AuthAuditLogger
         if (!in_array($action, self::ACTIONS, true)) {
             throw new \InvalidArgumentException('未定義の監査アクション: ' . $action);
         }
-        $this->repo->insert($actorUserId, $targetUserId, $action, $result, self::ipToBinary($this->ip));
+        $ip = $this->ip !== null && filter_var($this->ip, FILTER_VALIDATE_IP) !== false ? $this->ip : null;
+        $this->repo->insert($actorUserId, $targetUserId, $action, $result, $ip);
     }
 
     /** "192.168.0.1" / "::1" → VARBINARY(16) 用のバイナリ（PHP inet_pton） */

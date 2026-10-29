@@ -131,7 +131,7 @@ $tag = bin2hex(random_bytes(3));
 $acc = $app->accounts();
 $mk = function (string $role) use ($acc, $tag): array {
     $id = "smoke_{$role}_{$tag}";
-    $r = $acc->createUser(null, $id, "{$id}@example.invalid", $role);
+    $r = $acc->createUser(null, $id, "テスト {$role}", "{$id}@example.invalid", $role);
     return ['login' => $id, 'id' => $r['id'], 'temp' => $r['temp_password'], 'pw' => 'Smoke-' . bin2hex(random_bytes(8))];
 };
 $student = $mk('student');
@@ -150,7 +150,7 @@ $cookie = $r['headers']['set-cookie'] ?? '';
 check('セッションCookieに HttpOnly', stripos($cookie, 'httponly') !== false, $cookie);
 check('セッションCookieに SameSite=Lax', stripos($cookie, 'samesite=lax') !== false, $cookie);
 foreach (['/.env', '/.git/config', '/config/app.php', '/app/bootstrap.php', '/storage/logs/',
-          '/database/migrations/001_auth_schema.sql', '/scripts/create_user.php', '/README.md'] as $path) {
+          '/database/migrations/001_equipment_management.sql', '/scripts/create_user.php', '/docs/auth_database_design.md', '/README.md'] as $path) {
     $r = (new Client($base))->request('GET', $path);
     $leak = str_contains($r['body'], 'DB_PASSWORD') || str_contains($r['body'], '<?php') || str_contains($r['body'], 'CREATE TABLE');
     check("非公開ファイル {$path} が見えない", in_array($r['status'], [403, 404], true) && !$leak, "status={$r['status']}");
@@ -179,13 +179,15 @@ $sidBefore = $s->sid();
 $r = $s->login($student['login'], $student['temp']);
 check('仮パスワードでログイン → パスワード変更画面へ', goesTo($r, '/password/change'), "status={$r['status']} " . ($r['headers']['location'] ?? ''));
 check('ログイン成功でセッションIDが変わる（固定攻撃対策）', $sidBefore !== '' && $s->sid() !== '' && $sidBefore !== $s->sid());
-$row = $pdo->prepare('SELECT user_id, revoked_at, created_at FROM user_sessions WHERE session_token_hash = :h');
+$row = $pdo->prepare('SELECT user_id, revoked_at, last_active_at, expires_at FROM user_sessions WHERE session_token_hash = :h');
 $row->execute([':h' => SessionRepository::hashToken($s->sid())]);
 $sessRow = $row->fetch();
 check('user_sessions にセッションIDのハッシュが登録される', $sessRow !== false && (int) $sessRow['user_id'] === $student['id'] && $sessRow['revoked_at'] === null);
 $row->execute([':h' => $s->sid()]);
 check('セッションIDそのものは保存されていない', $row->fetch() === false);
-check('保存時刻はUTC', $sessRow !== false && abs(strtotime($sessRow['created_at'] . ' UTC') - time()) < 120, (string) ($sessRow['created_at'] ?? ''));
+check('保存時刻はUTC', $sessRow !== false && abs(strtotime($sessRow['last_active_at'] . ' UTC') - time()) < 120, (string) ($sessRow['last_active_at'] ?? ''));
+check('expires_at は最終操作の30分後', $sessRow !== false
+    && strtotime($sessRow['expires_at'] . ' UTC') - strtotime($sessRow['last_active_at'] . ' UTC') === 30 * 60);
 $fix = new Client($base);
 $fix->cookies['RSVSESSID'] = $sidBefore;
 check('ログイン前の古いセッションIDでは入れない', goesToLogin($fix->request('GET', '/')));
@@ -203,10 +205,10 @@ $sidPre = $s->sid();
 $r = $s->changePassword($student['temp'], $student['pw']);
 check('正しく変更すると 303 でホームへ', goesTo($r, '/'), "status={$r['status']}");
 check('変更後にセッションIDが変わる', $s->sid() !== $sidPre && $s->sid() !== '');
-$u = $pdo->prepare('SELECT must_change_password, password_changed_at FROM users WHERE id = :id');
+$u = $pdo->prepare('SELECT must_change_password FROM users WHERE id = :id');
 $u->execute([':id' => $student['id']]);
 $ur = $u->fetch();
-check('must_change_password=FALSE・password_changed_at 記録', (int) $ur['must_change_password'] === 0 && $ur['password_changed_at'] !== null);
+check('must_change_password=FALSE になる', (int) $ur['must_change_password'] === 0);
 $r = $s->request('GET', '/');
 check('変更後はホームが見える', $r['status'] === 200 && str_contains($r['body'], $student['login']), "status={$r['status']}");
 check('旧パスワードではログインできない', (new Client($base))->login($student['login'], $student['temp'])['status'] === 401);
@@ -270,18 +272,20 @@ $cnt->execute([':in' => $target]);
 check('存在しないIDの失敗も login_attempts に記録（ロック中の試行は数えない）', (int) $cnt->fetchColumn() === 5);
 
 echo "\n[監査ログ]\n";
-$q = $pdo->prepare('SELECT action, result FROM auth_audit_logs WHERE target_user_id = :id ORDER BY id');
+$q = $pdo->prepare("SELECT action, details FROM audit_logs WHERE entity_type = 'user' AND entity_id = :id ORDER BY id");
 $q->execute([':id' => $student['id']]);
-$actions = array_map(fn ($r) => $r['action'] . ':' . $r['result'], $q->fetchAll());
+$actions = array_map(fn ($r) => $r['action'] . ':' . (json_decode((string) $r['details'], true)['result'] ?? '?'), $q->fetchAll());
 foreach (['user_created:success', 'login_success:success', 'login_failure:failure', 'password_changed:failure',
           'password_changed:success', 'account_suspended:success', 'account_reactivated:success',
           'password_reset_by_admin:success'] as $need) {
     check("監査ログに {$need}", in_array($need, $actions, true));
 }
-$ipq = $pdo->prepare("SELECT ip_address FROM auth_audit_logs WHERE target_user_id = :id AND action = 'login_success' LIMIT 1");
+$ipq = $pdo->prepare("SELECT details FROM audit_logs WHERE entity_type = 'user' AND entity_id = :id AND action = 'login_success' LIMIT 1");
 $ipq->execute([':id' => $student['id']]);
-$ipRaw = $ipq->fetchColumn();
-check('監査ログのIPは inet_pton 形式で保存', is_string($ipRaw) && inet_ntop($ipRaw) !== false);
+$ip = json_decode((string) $ipq->fetchColumn(), true)['ip'] ?? null;
+check('監査ログに接続元IPが記録される', is_string($ip) && filter_var($ip, FILTER_VALIDATE_IP) !== false);
+$pw = $pdo->query("SELECT COUNT(*) FROM audit_logs WHERE details LIKE '%Smoke-%'")->fetchColumn();
+check('監査ログにパスワードが含まれない', (int) $pw === 0);
 
 echo "\n[エラー表示]\n";
 $r = (new Client($base))->request('GET', '/items/' . rawurlencode("1' OR '1'='1"));

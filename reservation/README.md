@@ -1,7 +1,9 @@
 # 学内施設・備品予約貸出管理システム — ログイン・セキュリティ土台
 
 - 詳細設計書 DD-SEC-001 の「11. 実装順 2.」（認証・セッション・CSRF・エラー処理・テンプレート出力の基盤）
-- DB は PO 作成の **ログイン認証DB設計書**（リポジトリ直下の `docs/05_auth_database_design.md` / `database/migrations/001_auth_schema.sql`）に準拠
+- DB は **オーナー作成の `database/migrations/001_equipment_management.sql`**（データベース名 `equipment_management`）を土台にする。
+  このファイルは変更せず、足りないログイン試行の記録だけを `002_login_attempts.sql` で追加している。
+- ログインまわりの考え方は PO 作成の **ログイン認証DB設計書**（`docs/auth_database_design.md`）に準拠
 
 ## できていること
 
@@ -10,17 +12,20 @@
 | ログイン／ログアウト（`password_hash` / `password_verify`、ID存在を明かさない） | DB設計 5-2 | `app/Services/AuthService.php` |
 | 15分で5回失敗 → 15分ロック、同一IP 15分20回で一時拒否 | DB設計 5-8 | `app/Services/LoginThrottle.php` |
 | ログイン時にセッションID再生成、SHA-256 を `user_sessions` に登録 | DB設計 5-3 | `AuthService::establishSession` |
-| 毎リクエストで「行あり・未失効・active・30分以内」を確認、操作で `last_activity_at` 更新 | DB設計 5-4 | `app/Support/App.php` |
+| 毎リクエストで「行あり・未失効・active・期限内」を確認、操作で `last_active_at` 更新・`expires_at` を30分先へ延長 | DB設計 5-4 | `app/Support/App.php` |
 | 複数端末ログイン可。ログアウトはその端末だけ失効（行は削除せず `revoked_at`） | DB-009 | `SessionRepository` |
 | 初回・仮PW再発行後はパスワード変更以外を使えない | DB設計 5-5 | `AuthMiddleware`, `PasswordController` |
 | 停止／再有効化／仮PW再発行（全端末失効・監査をトランザクションで） | DB設計 5-6, 5-7 | `app/Services/AccountService.php`, `scripts/user_admin.php` |
 | 教員は一般利用者と同じ扱い（`role:user`）、管理画面は `role:admin` のみ | DB設計 5-11 | `RoleMiddleware` |
-| 監査ログ `auth_audit_logs`（IPは `inet_pton`）、アプリDBユーザーに更新・削除権限なし | DB-012 | `AuthAuditLogger` |
+| ホーム（`/`）を生徒用・教員用に分けて表示（権限は同じ、案内文だけ違う）。管理者は `/admin` へ | DB設計 5-11 | `HomeController`, `app/Views/home/student.php`, `teacher.php` |
+| 監査ログ `audit_logs`（`entity_type='user'`、成否とIPは `details` にJSON）、アプリDBユーザーに更新・削除権限なし | DB-012 | `AuthAuditLogger` |
+| 画面に名前（`users.name`）とユーザーIDを表示 | — | `app/Views/layout.php` |
 | 保存はUTC、表示はJST | DB-015 | `app/Support/Clock.php` |
 | CSRF（全POST）、XSS（`h()`＋CSP）、SQLi（本物のプリペアド）、安全なエラー画面 | DD 6.1〜6.5 | `app/Support/*` |
 | `public/` 以外をWebから見せない | DD 2.1 | `.htaccess` |
 
-まだ無いもの：施設・備品・予約・承認・貸出・返却、管理画面からのユーザー登録（当面はコマンド）。
+まだ無いもの：備品一覧・予約・承認・貸出・返却の画面、管理画面からのユーザー登録（当面はコマンド）。
+テーブル（`equipment` / `reservations` / `loans` など）はオーナーのSQLで作成済み。
 
 ---
 
@@ -30,26 +35,25 @@
 
 `/Applications/XAMPP/xamppfiles/htdocs/reservation/` に中身を丸ごと置く（`.htaccess` などの隠しファイルも。Finderでは Cmd+Shift+. で表示）。
 
-### 2. データベースを作る（phpMyAdmin の「SQL」タブ）
+### 2. データベースを作る（phpMyAdmin の「インポート」）
 
-`database/migrations/001_auth_schema.sql` の中身を貼って「実行」
-→ 左に `school_reservation` ができ、テーブル5つ（roles / users / user_sessions / auth_audit_logs / login_attempts）がある
+1. `database/migrations/001_equipment_management.sql`（オーナー作成）をインポート
+   → 左に `equipment_management` ができ、テーブル12個と備品5件（梯子・マイクなど）が入る
+2. 続けて `database/migrations/002_login_attempts.sql` をインポート → `login_attempts` が増えて13個
 
-> 以前の版で `rsv` データベースを作っていた場合は、phpMyAdmin で削除してよい（もう使わない）。
+> 前の版で作った `school_reservation` データベースはもう使わない。phpMyAdmin で削除してよい。
 
-### 3. アプリ用DBユーザーと `.env` を自動で用意する
+### 3. アプリ用のDBユーザーと `.env` を作る
 
 ```bash
 cd /Applications/XAMPP/xamppfiles/htdocs/reservation
 /Applications/XAMPP/xamppfiles/bin/php scripts/setup_db_user.php
 ```
 
-DBの管理者（root）のパスワードを聞かれる。XAMPPの初期状態なら何も入力せず Enter。
-ランダムなパスワードを作って、DBユーザー `rsv_app` の作成・権限付与と `.env` への書き込みを自動で行い、接続確認までする（✔ が3つ出れば成功）。
-何度実行してもよい（そのたびにパスワードが作り直される）。
+DBの管理者(root)のパスワードを聞かれる（XAMPPの初期状態なら何も入力せず Enter）。
+`rsv_app` ユーザーの作成・権限付与・`.env` の `DB_PASSWORD` 書き換えまで自動で行う。
 
-> 手作業でやる場合は `database/setup/02_create_app_user.sql` を phpMyAdmin で実行し、同じパスワードを `.env` の `DB_PASSWORD=` に書く。
-> Access denied が出るときは `.env` の `DB_HOST` が `localhost` になっているか確認する（`127.0.0.1` だとMacに別のMySQLがあるとそちらにつながる）。
+**前の版の `.env` がある場合は、先に `DB_NAME=equipment_management` に書き換えておく。**
 
 ### 4. ログフォルダに書き込めるようにする
 
@@ -62,12 +66,12 @@ sudo chmod -R 770 storage/logs
 
 ```bash
 PHP=/Applications/XAMPP/xamppfiles/bin/php
-$PHP scripts/create_user.php --user-id=admin01 --email=admin01@example.com --role=admin
-$PHP scripts/create_user.php --user-id=s0001   --email=s0001@example.com   --role=student
-$PHP scripts/create_user.php --user-id=t0001   --email=t0001@example.com   --role=teacher
+$PHP scripts/create_user.php --user-id=admin01 --name="管理 太郎" --email=admin01@example.com --role=admin
+$PHP scripts/create_user.php --user-id=s0001   --name="生徒 花子" --email=s0001@example.com   --role=student
+$PHP scripts/create_user.php --user-id=t0001   --name="教員 一郎" --email=t0001@example.com   --role=teacher
 ```
 
-仮パスワードが1回だけ表示される。初回ログインでパスワード変更画面になる。
+名前（`--name`）は必須。架空の名前にする。仮パスワードが1回だけ表示される。初回ログインでパスワード変更画面になる。
 
 ### 6. 開く
 
@@ -113,13 +117,16 @@ BASE_URL=http://localhost/reservation $PHP tests/Security/smoke_test.php
 5. 他人のデータは `WHERE user_id = ログイン中の users.id` で絞る。
    **注意：`users.user_id` はログインID（文字列）、外部キーが指すのは `users.id`（数値）。** アプリ内では
    `$app->user['id']`（数値）と `$app->user['login_id']`（文字列）で区別している。
-6. DBに入れる時刻は UTC（`Clock::nowUtc()` / `UTC_TIMESTAMP(6)`）、画面には `Clock::toJst()`。
+6. DBに入れる時刻は UTC（`Clock::nowUtc()` / `UTC_TIMESTAMP()`）、画面には `Clock::toJst()`。
+   接続時に `time_zone = '+00:00'` にしているので、オーナーのテーブルの `DEFAULT CURRENT_TIMESTAMP` もUTCで入る。
 7. 新しいテーブルを作ったら、`02_create_app_user.sql` に必要最小限の権限を追記。
 
 ## PO確認待ち
 
-- 表示名の列が `users` に無い → 当面は画面にユーザーIDを表示
-- 業務操作（承認・貸出・返却など）の監査ログ（変更前後・理由）は `auth_audit_logs` では足りない → 別テーブル追加でよいか
+- オーナーのSQLには**施設**のテーブルが無く、備品（`equipment`）だけ → 施設の予約は対象外になったのか
+- オーナーのSQLの注意書きにある業務ルール（予約7日以内／90日先まで／最大5件／自己承認禁止／延滞中は利用禁止）の正確な意味
+- `notifications` はアプリ内のお知らせ一覧として使う想定（要望書の対象外「リアルタイム通知」には当たらない）でよいか
+- パスワード変更日時の列が `users` に無いので、`audit_logs` の `password_changed` で代わりに記録している
 - `users.user_id` と `user_sessions.user_id` が同じ名前で別の意味
 - 本人がパスワードを変えたとき、**他の端末も全部ログアウト**する実装にした（設計書に明記なし。漏えい対策として）
-- `auth_schema.sql` の先頭に `SET NAMES utf8mb4;` を足すとよい（phpMyAdmin以外のツールで流すと「生徒」などが文字化けするため）
+- オーナーのSQLの先頭に `SET NAMES utf8mb4;` を足すとよい（phpMyAdmin以外のツールで流すと「梯子」などが文字化けするため）
