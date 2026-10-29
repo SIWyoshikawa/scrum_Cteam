@@ -1,4 +1,4 @@
-# 学内施設・備品予約貸出管理システム — ログイン・セキュリティ土台
+# 学内施設・備品予約貸出管理システム
 
 - 詳細設計書 DD-SEC-001 の「11. 実装順 2.」（認証・セッション・CSRF・エラー処理・テンプレート出力の基盤）
 - DB は **オーナー作成の `database/migrations/001_equipment_management.sql`**（データベース名 `equipment_management`）を土台にする。
@@ -24,8 +24,38 @@
 | CSRF（全POST）、XSS（`h()`＋CSP）、SQLi（本物のプリペアド）、安全なエラー画面 | DD 6.1〜6.5 | `app/Support/*` |
 | `public/` 以外をWebから見せない | DD 2.1 | `.htaccess` |
 
-まだ無いもの：備品一覧・予約・承認・貸出・返却の画面、管理画面からのユーザー登録（当面はコマンド）。
-テーブル（`equipment` / `reservations` / `loans` など）はオーナーのSQLで作成済み。
+### 予約・貸出（ブランチ `feature/reservation-loan`）
+
+| 機能 | 根拠 | URL |
+|---|---|---|
+| 備品の一覧・名前／分類で検索。期間を入れると空き数を表示 | F-003/004 | `GET /items` |
+| 予約申請（期間・利用目的・複数の備品と数量） | F-005 | `GET/POST /reservations/new` |
+| 自分の予約一覧・詳細、申請中の取消（他人の予約は404） | F-008/010 | `/my/reservations`, `/my/reservations/{id}`, `POST …/cancel` |
+| 管理メニュー（申請中・受け取り待ち・貸出中・延滞の件数） | F-006/007/011 | `GET /admin` |
+| 申請一覧（タブで絞り込み）・承認／却下（理由必須）・承認済みの取消（理由必須） | F-006 | `/admin/reservations`, `POST …/approve` `…/reject` `…/cancel` |
+| 貸出（利用開始日〜返却予定日）・返却（一部返却可、全部返ると「返却済み」） | F-007 | `POST …/checkout` `…/return` |
+| 在庫チェック：承認済み・未返却の分を引いて足りるか。申請中どうしの重なりは可 | F-009 | `EquipmentRepository::reservedQuantities` |
+| 同時に承認しても在庫を超えない（備品行をロック → 再確認、READ COMMITTED） | 詳細設計 5.3 | `ReservationService` |
+| 延滞は「貸出中で返却予定日が今日より前」の派生表示。延滞中の人は新規申請不可 | F-011 | |
+| 申請中のまま開始日を過ぎた／承認済みのまま返却予定日を過ぎた → 期限切れ | — | `ReservationService::expireStale` |
+| 状態を文字＋色＋枠線の形で表示（色だけに頼らない） | F-013 | `status_badge()` |
+| 承認・却下・取消の結果を本人のホームに「お知らせ」表示（メールは送らない） | — | `notifications` |
+| すべての操作を `audit_logs` に記録（変更前後・理由・相関ID・IP） | 詳細設計 6.7 | `AuditLogger` |
+
+予約のルール（`config/app.php` の `reservation`。オーナーSQLの注意書きをこう解釈。**PO確認待ち**）
+
+| 注意書き | この実装での意味 | 設定 |
+|---|---|---|
+| 予約7日以内 | 1回に借りられる期間は、開始日と返却予定日を含めて7日まで | `max_days` |
+| 90日先 | 利用開始日は今日から90日後まで | `max_advance_days` |
+| 最大5件 | 1人が同時に持てる「申請中・承認済み・貸出中」は5件まで | `max_active` |
+| 本人キャンセル条件 | 本人が取り消せるのは「申請中」だけ。承認済みは管理者が理由付きで取消 | — |
+| 自己承認禁止 | 管理者は自分の申請を承認・却下できない | — |
+| 延滞利用禁止 | 延滞中の貸出がある人は新しく申請できない | — |
+
+「今日」は日本時間の日付（学内運用日）で判定する。
+
+まだ無いもの：備品・分類の登録／変更／利用停止の画面（当面は phpMyAdmin）、管理画面からのユーザー登録（当面はコマンド）。
 
 ---
 
@@ -101,10 +131,17 @@ $PHP scripts/user_admin.php reset-password --user-id=s0001   # 仮パスワー�
 # 単体テスト（DB不要）
 $PHP tests/run.php
 
-# 動いているサーバに対するセキュリティ確認（71項目）
+# 動いているサーバに対するセキュリティ確認
 # smoke_ で始まる架空ユーザーを自動で作り、最後に停止状態にする
 BASE_URL=http://localhost/reservation $PHP tests/Security/smoke_test.php
+
+# 予約→承認→貸出→返却の通しテスト（同時承認・他人の予約・延滞なども確認）
+# flow_ で始まる架空ユーザーと「テスト備品_…」を作り、最後にユーザー停止・備品を利用停止にする
+BASE_URL=http://localhost/reservation $PHP tests/Feature/reservation_flow_test.php
 ```
+
+> 同じPCから続けて実行すると、ログイン失敗のテストのせいで「同じIPから15分に20回失敗」のロックに
+> かかることがある。そのときは15分待つか、phpMyAdmin で `DELETE FROM login_attempts;` を実行する。
 
 ---
 

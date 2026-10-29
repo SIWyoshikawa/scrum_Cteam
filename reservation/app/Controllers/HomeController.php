@@ -26,6 +26,12 @@ final class HomeController extends Controller
             return Response::redirect('/admin');
         }
         [$template, $title] = self::HOMES[$role] ?? ['home/index', 'ホーム'];
-        return $this->view($template, ['title' => $title]);
+        $id = (int) $this->app->user['id'];
+        return $this->view($template, [
+            'title'         => $title,
+            'notifications' => $this->app->notifications()->unread($id, 5),
+            'activeCount'   => $this->app->reservationRepo()->countActive($id),
+            'maxActive'     => $this->app->reservationRules()->config()['max_active'],
+        ]);
     }
 }

@@ -28,8 +28,14 @@ $title = $title ?? '';
         <span class="login-id">(<?= h($currentUser['login_id']) ?>)</span>
         <span class="badge badge-<?= h($currentUser['role']) ?>"><?= h($currentUser['role_display']) ?></span>
       </span>
-      <?php if ($currentUser['role'] === 'admin' && !$currentUser['must_change_password']): ?>
-        <a href="<?= h(url('/admin')) ?>">管理メニュー</a>
+      <?php if (!$currentUser['must_change_password']): ?>
+        <?php if ($currentUser['role'] === 'admin'): ?>
+          <a href="<?= h(url('/admin')) ?>">管理メニュー</a>
+          <a href="<?= h(url('/admin/reservations')) ?>">予約の管理</a>
+        <?php else: ?>
+          <a href="<?= h(url('/items')) ?>">備品をさがす</a>
+          <a href="<?= h(url('/my/reservations')) ?>">自分の予約</a>
+        <?php endif; ?>
       <?php endif; ?>
       <a href="<?= h(url('/password/change')) ?>">パスワード変更</a>
       <form method="post" action="<?= h(url('/logout')) ?>" class="inline">

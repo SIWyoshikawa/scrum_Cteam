@@ -11,12 +11,19 @@ use App\Middleware\RoleMiddleware;
 use App\Repositories\AuthAuditLogRepository;
 use App\Repositories\LoginAttemptRepository;
 use App\Repositories\SessionRepository;
+use App\Repositories\EquipmentRepository;
+use App\Repositories\LoanRepository;
+use App\Repositories\NotificationRepository;
+use App\Repositories\ReservationRepository;
 use App\Repositories\UserRepository;
 use App\Services\AccountService;
 use App\Services\AuthAuditLogger;
 use App\Services\AuthService;
 use App\Services\LoginThrottle;
+use App\Services\AuditLogger;
 use App\Services\PasswordPolicy;
+use App\Services\ReservationRules;
+use App\Services\ReservationService;
 
 /**
  * アプリ本体：1リクエストの流れをまとめる
@@ -175,6 +182,44 @@ final class App
             $this->audit(),
             $this->passwordPolicy(),
             $this->ip,
+        );
+    }
+
+    public function equipment(): EquipmentRepository
+    {
+        return new EquipmentRepository($this->db->pdo());
+    }
+
+    public function reservationRepo(): ReservationRepository
+    {
+        return new ReservationRepository($this->db->pdo());
+    }
+
+    public function loanRepo(): LoanRepository
+    {
+        return new LoanRepository($this->db->pdo());
+    }
+
+    public function notifications(): NotificationRepository
+    {
+        return new NotificationRepository($this->db->pdo());
+    }
+
+    public function reservationRules(): ReservationRules
+    {
+        return new ReservationRules($this->config['reservation']);
+    }
+
+    public function reservations(): ReservationService
+    {
+        return new ReservationService(
+            $this->db,
+            $this->reservationRepo(),
+            $this->equipment(),
+            $this->loanRepo(),
+            $this->notifications(),
+            new AuditLogger($this->db->pdo(), $this->ip, $this->logger->correlationId()),
+            $this->reservationRules(),
         );
     }
 
